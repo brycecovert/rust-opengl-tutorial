@@ -147,9 +147,18 @@ impl Texture {
             gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
             gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
             gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-            gl.TexImage2D(gl::TEXTURE_2D, 0, gl::RGB as gl::types::GLint, width, height, 0, gl::RGB, gl::UNSIGNED_BYTE, data.as_ptr() as *const gl::types::GLvoid);
+            gl.TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as gl::types::GLint, width, height, 0, gl::RGBA, gl::UNSIGNED_BYTE, data.as_ptr() as *const gl::types::GLvoid);
             gl.GenerateMipmap(gl::TEXTURE_2D);
         }
         Ok(Texture {id: tex, gl: gl.clone()})
    }
 }
+
+impl Drop for Texture {
+    fn drop(&mut self) {
+        unsafe {
+            self.gl.DeleteTextures(1, &self.id as *const gl::types::GLuint);
+        }
+    }
+}
+

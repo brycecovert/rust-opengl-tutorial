@@ -7,6 +7,7 @@ authors = ["bryce"]
 sdl2 = { version = "0.31.0", features = ["bundled", "static-link"]}
 gl = { path = "lib/gl" }
 png = "0.13.2"
+cgmath = "0.16.0"
 
 
 

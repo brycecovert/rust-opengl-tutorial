@@ -3,8 +3,13 @@ extern crate sdl2;
 
 use std::fs::File;
 extern crate png;
+extern crate cgmath;
+
+use cgmath::conv::*;
 
 use std::ffi::{CString};
+
+
 
 
 pub mod render_gl;
@@ -26,10 +31,13 @@ fn main() {
     let _gl_context = window.gl_create_context().unwrap();
     let gl = gl::Gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
 
+
     let vert_shader = render_gl::Shader::from_vert_source(
         &gl,
         include_str!("triangle.vert")
     ).expect("There should be no problem vert");
+
+    let vert_shader_id = vert_shader.id;
 
     let frag_shader = render_gl::Shader::from_frag_source(
         &gl,
@@ -46,7 +54,7 @@ fn main() {
 
     println!("shader id: {}", shader_program.id);
 
-    let decoder = png::Decoder::new(File::open("example.png").unwrap());
+    let decoder = png::Decoder::new(File::open("tongue-hit_0.png").unwrap());
     let (info, mut reader) = decoder.read_info().unwrap();
 
     let mut buf = vec![0; info.buffer_size()];
@@ -62,10 +70,10 @@ fn main() {
     }
 
     let vertices: Vec<f32> = vec![
-         0.5,  0.5,  0.0,   1.0, 0.0, 0.0,   1.0, 1.0,
-         0.5, -0.5,  0.0,   0.0, 1.0, 0.0,   1.0, 0.0,
-        -0.5, -0.5,  0.0,   0.0, 0.0, 1.0,   0.0, 0.0,
-        -0.5,  0.5,  0.0,   1.0, 1.0, 0.0,   0.0, 1.0
+              100.0,  100.0,  0.0,   1.0, 1.0, 1.0,   1.0, 1.0,
+              100.0,    0.0,  0.0,   1.0, 1.0, 1.0,   1.0, 0.0,
+              0.0,      0.0,  0.0,   1.0, 1.0, 1.0,   0.0, 0.0,
+              0.0,    100.0,  0.0,   1.0, 1.0, 1.0,   0.0, 1.0
     ];
 
     let mut vbo: gl::types::GLuint = 0;
@@ -133,6 +141,14 @@ fn main() {
         );
     }
 
+    let ortho_matrix = cgmath::ortho(0.0, 900.0, 700.0, 0.0, 0.0, 1.0);
+    let x = array4x4(ortho_matrix);
+    let y: Vec<f32> = vec![
+        x[0][0], x[0][1], x[0][2], x[0][3],
+        x[1][0], x[1][1], x[1][2], x[1][3],
+        x[2][0], x[2][1], x[2][2], x[2][3],
+        x[3][0], x[3][1], x[3][2], x[3][3],
+    ];
 
 
     let mut event_pump = sdl.event_pump().unwrap();
@@ -147,7 +163,11 @@ fn main() {
         shader_program.set_used();
         unsafe {
             gl.Clear(gl::COLOR_BUFFER_BIT);
+            // gl.Ortho(0.0, 900.0, 0.0, 700.0);
+            gl.Enable(gl::BLEND);
+            gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
             gl.Uniform1i(gl.GetUniformLocation(frag_shader_id, CString::new("texture1").unwrap().as_ptr()), 0);
+            gl.UniformMatrix4fv(gl.GetUniformLocation(shader_program.id, CString::new("projectionmatrix").unwrap().as_ptr()), 1, gl::FALSE, y.as_ptr() as *const f32);
             gl.ActiveTexture(gl::TEXTURE0);
             gl.BindTexture(gl::TEXTURE_2D, tex.id);
             gl.BindVertexArray(vao);
