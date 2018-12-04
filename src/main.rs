@@ -19,9 +19,6 @@ struct Sprite {
     pub frag_shader_id: u32,
     pub vert_shader_id: u32,
     pub quad: Quad,
-    pub vao: u32,
-    pub vbo: u32,
-    pub ebo: u32,
     pub vertices: Vec<f32>,
 }
 
@@ -107,24 +104,61 @@ impl Sprite {
 
         let vertices: Vec<f32> = quad.to_vertex_data();
         println!("{:?}", vertices);
+        let v_d = quad.to_vertex_data();
 
+            Sprite { gl: gl.clone(), frag_shader_id, vert_shader_id, texture: tex, shader, quad, vertices: v_d }
+    }
+
+    pub fn draw(&self, projection: &Vec<f32>, x: f32, y: f32) {
+        let _vertices: Vec<f32> = self.quad.add(x, y).to_vertex_data();
+        /*
+        unsafe {
+            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+            self.gl.BufferSubData(gl::ARRAY_BUFFER,
+                                  0,
+                               (_vertices.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
+                               _vertices.as_ptr() as *const gl::types::GLvoid,
+                               
+            );
+            self.gl.BindBuffer(gl::ARRAY_BUFFER, 0);
+        }
+        unsafe {
+            self.gl.Uniform1i(self.gl.GetUniformLocation(self.frag_shader_id, CString::new("texture1").unwrap().as_ptr()), 0);
+            self.gl.UniformMatrix4fv(self.gl.GetUniformLocation(self.shader, CString::new("projectionmatrix").unwrap().as_ptr()), 1, gl::FALSE, projection.as_ptr() as *const f32);
+            self.gl.ActiveTexture(gl::TEXTURE0);
+            self.gl.BindTexture(gl::TEXTURE_2D, self.texture.id);
+            self.gl.BindVertexArray(self.vao);
+            self.gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ebo);
+            self.gl.DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
+        }
+        
+        */
+    }
+    
+}
+
+struct SpriteBatch {
+    gl: gl::Gl,
+    pub vao: u32,
+    pub vbo: u32,
+    pub ebo: u32,
+    vertex_buffer: Vec<f32>,
+    index_buffer: Vec<u32>,
+    count: u32
+}
+
+impl SpriteBatch {
+    pub fn new(gl: &gl::Gl) -> SpriteBatch {
+        let mut result = SpriteBatch { gl: gl.clone(), vao: 0, vbo: 0, ebo: 0, vertex_buffer: Vec::with_capacity(400000), index_buffer: Vec::with_capacity(400000), count: 0};
         let mut vbo: gl::types::GLuint = 0;
         unsafe {
-            gl.GenBuffers(1, &mut vbo);
-            gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl.BufferData(gl::ARRAY_BUFFER,
-                          (vertices.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
-                          vertices.as_ptr() as *const gl::types::GLvoid,
-                          gl::STATIC_DRAW,
-            );
-            gl.BindBuffer(gl::ARRAY_BUFFER, 0);
+            gl.GenBuffers(1, &mut result.vbo);
         }
 
         let mut vao: gl::types::GLuint = 0;
         unsafe {
-            gl.GenVertexArrays(1, &mut vao);
+            gl.GenVertexArrays(1, &mut result.vao);
             gl.BindVertexArray(vao);
-            gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
             gl.EnableVertexAttribArray(0);
             gl.VertexAttribPointer(0,
                                    4,
@@ -151,56 +185,86 @@ impl Sprite {
                                    (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
                                    (7 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid
             );
-
-
-            gl.BindBuffer(gl::ARRAY_BUFFER, 0);
-            gl.BindVertexArray(0);
         }
-
-        let indices: Vec<u32> = vec![
-            0, 1, 3,
-            1, 2, 3
-        ];
 
         let mut ebo: gl::types::GLuint = 0;
         unsafe {
-            gl.GenBuffers(1, &mut ebo);
+            gl.GenBuffers(1, &mut result.ebo);
             gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-            gl.BufferData(gl::ELEMENT_ARRAY_BUFFER,
-                          (indices.len() * std::mem::size_of::<i32>()) as gl::types::GLsizeiptr,
-                          indices.as_ptr() as *const gl::types::GLvoid,
-                          gl::STATIC_DRAW);
         }
+        result
 
-        let v_d = quad.to_vertex_data();
-
-            Sprite { gl: gl.clone(), frag_shader_id, vert_shader_id, texture: tex, vbo, vao, ebo, shader, quad, vertices: v_d }
+            
     }
 
-    pub fn draw(&self, projection: &Vec<f32>, x: f32, y: f32) {
-        let _vertices: Vec<f32> = self.quad.add(x, y).to_vertex_data();
+    pub fn draw(&mut self, sprite: &Sprite, projection: &Vec<f32>, x: f32, y: f32) {
+        self.count += 1;;
+        let mut _vertices: Vec<f32> = sprite.quad.add(x, y).to_vertex_data();
+        self.vertex_buffer.append(&mut _vertices);
+        self.index_buffer.append(&mut vec![
+            self.count * 4 + 0, self.count * 4 + 1, self.count * 4 + 3,
+            self.count * 4 + 1, self.count * 4 + 2, self.count * 4 + 3,
+        ]);
+    }
+
+    pub fn flush(&mut self) {
+        self.count = 0;
         unsafe {
             self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-            self.gl.BufferSubData(gl::ARRAY_BUFFER,
-                                  0,
-                               (_vertices.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
-                               _vertices.as_ptr() as *const gl::types::GLvoid,
+            self.gl.BufferData (gl::ARRAY_BUFFER,
+                               (self.vertex_buffer.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
+                               self.vertex_buffer.as_ptr() as *const gl::types::GLvoid,
+                                gl::STATIC_DRAW
                                
             );
-            self.gl.BindBuffer(gl::ARRAY_BUFFER, 0);
+            // self.gl.BindBuffer(gl::ARRAY_BUFFER, 0);
         }
         unsafe {
-            self.gl.Uniform1i(self.gl.GetUniformLocation(self.frag_shader_id, CString::new("texture1").unwrap().as_ptr()), 0);
-            self.gl.UniformMatrix4fv(self.gl.GetUniformLocation(self.shader, CString::new("projectionmatrix").unwrap().as_ptr()), 1, gl::FALSE, projection.as_ptr() as *const f32);
-            self.gl.ActiveTexture(gl::TEXTURE0);
-            self.gl.BindTexture(gl::TEXTURE_2D, self.texture.id);
+            self.gl.BindVertexArray(self.vao);
+            self.gl.EnableVertexAttribArray(0);
+            self.gl.VertexAttribPointer(0,
+                                   4,
+                                   gl::FLOAT,
+                                   gl::FALSE,
+                                   (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                                   std::ptr::null()
+            );
+            self.gl.EnableVertexAttribArray(1);
+            self.gl.VertexAttribPointer(1,
+                                   3,
+                                   gl::FLOAT,
+                                   gl::FALSE,
+                                   (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                                   (4 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid
+            );
+
+
+            self.gl.EnableVertexAttribArray(2);
+            self.gl.VertexAttribPointer(2,
+                                   2,
+                                   gl::FLOAT,
+                                   gl::FALSE,
+                                   (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                                   (7 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid
+            );
+        }
+        unsafe {
+            self.gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ebo);
+            self.gl.BufferData(gl::ELEMENT_ARRAY_BUFFER,
+                          (self.index_buffer.len() * std::mem::size_of::<i32>()) as gl::types::GLsizeiptr,
+                          self.index_buffer.as_ptr() as *const gl::types::GLvoid,
+                          gl::STATIC_DRAW);
+        }
+        unsafe {
+            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
             self.gl.BindVertexArray(self.vao);
             self.gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ebo);
-            self.gl.DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
+            self.gl.DrawElements(gl::TRIANGLES, self.index_buffer.len() as i32, gl::UNSIGNED_INT, std::ptr::null());
         }
-        
+
+        self.vertex_buffer.clear();
+        self.index_buffer.clear();
     }
-    
 }
 
 
@@ -262,10 +326,12 @@ fn main() {
     let mut locations_x: Vec<f32> = vec![0.0];
     let mut locations_y: Vec<f32> = vec![0.0];
     let mut event_pump = sdl.event_pump().unwrap();
-    for i in 0..500 {
+    for i in 0..5000 {
         locations_x.push(rng.gen_range(0.0, 900.0));
         locations_y.push(rng.gen_range(0.0, 700.0));
     }
+
+    let mut sprite_batch = SpriteBatch::new(&gl);
 
     'main: loop {
         let begin = time::Instant::now();
@@ -281,15 +347,23 @@ fn main() {
             gl.Clear(gl::COLOR_BUFFER_BIT);
             gl.Enable(gl::BLEND);
             gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-            locations_x.iter().zip(locations_y.iter()).for_each(|(x, y)| sprite.draw(&projection, *x, *y));
+
+            gl.Uniform1i(gl.GetUniformLocation(shader_program.id, CString::new("texture1").unwrap().as_ptr()), 0);
+            gl.UniformMatrix4fv(gl.GetUniformLocation(shader_program.id, CString::new("projectionmatrix").unwrap().as_ptr()), 1, gl::FALSE, projection.as_ptr() as *const f32);
+            gl.ActiveTexture(gl::TEXTURE0);
+            gl.BindTexture(gl::TEXTURE_2D, sprite.texture.id);
+            let r: f32 = rng.gen();
+            locations_x.iter().zip(locations_y.iter()).for_each(|(x, y)| sprite_batch.draw(&sprite, &projection, *x, *y * r));
         }
+
+        sprite_batch.flush();
 
         window.gl_swap_window();
 
         use std::{thread, time};
         use std::ops::Sub;
         let end = time::Instant::now();
-        if rng.gen_range(0, 60) == 0 {
+        if rng.gen_range(0, 10) == 0 {
             println!("millis {}", end.sub(begin).subsec_millis())
         }
 
