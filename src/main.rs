@@ -12,7 +12,7 @@ use std::ffi::{CString};
 use rand::{thread_rng, Rng};
 
 
-struct Sprite {
+struct TextureRegion {
     pub gl: gl::Gl,
     pub texture: render_gl::Texture,
     pub shader: u32,
@@ -68,8 +68,49 @@ impl Quad {
     }
 }
 
-impl Sprite {
-    pub fn new(gl: &gl::Gl, image: &str, vert_shader_id: u32, frag_shader_id: u32, shader: u32) -> Sprite {
+impl TextureRegion {
+    pub fn new_uv(gl: &gl::Gl, image: &str, vert_shader_id: u32, frag_shader_id: u32, shader: u32, u1: f32, v1: f32, u2: f32, v2: f32) -> TextureRegion {
+        let decoder = png::Decoder::new(File::open(image).unwrap());
+        let (info, mut reader) = decoder.read_info().unwrap();
+
+        let mut buf = vec![0; info.buffer_size()];
+        reader.next_frame(&mut buf).unwrap();
+
+        let tex = render_gl::Texture::from_image(&gl, info.width as i32, info.height as i32, buf).unwrap();
+
+        let quad = Quad(
+            Vertex {
+                pos: (info.width as f32, info.height as f32, 0.0),
+                color: (1.0, 1.0, 1.0, 1.0),
+                uv: (u2, v2)
+            },
+            Vertex {
+                pos: (info.width as f32, 0.0, 0.0),
+                color: (1.0, 1.0, 1.0, 1.0),
+                uv: (u2, v1)
+            },
+            Vertex {
+                pos: (0.0, 0.0, 0.0),
+                color: (1.0, 1.0, 1.0, 1.0),
+                uv: (u1, v1)
+            },
+            Vertex {
+                pos: (0.0, info.height as f32, 0.0),
+                color: (1.0, 1.0, 1.0, 1.0),
+                uv: (u1, v2)
+            },
+        );
+
+
+        let vertices: Vec<f32> = quad.to_vertex_data();
+        println!("{:?}", vertices);
+        let v_d = quad.to_vertex_data();
+
+        TextureRegion { gl: gl.clone(), frag_shader_id, vert_shader_id, texture: tex, shader, quad, vertices: v_d }
+    }
+
+
+    pub fn new(gl: &gl::Gl, image: &str, vert_shader_id: u32, frag_shader_id: u32, shader: u32) -> TextureRegion {
         let decoder = png::Decoder::new(File::open(image).unwrap());
         let (info, mut reader) = decoder.read_info().unwrap();
 
@@ -106,7 +147,7 @@ impl Sprite {
         println!("{:?}", vertices);
         let v_d = quad.to_vertex_data();
 
-            Sprite { gl: gl.clone(), frag_shader_id, vert_shader_id, texture: tex, shader, quad, vertices: v_d }
+        TextureRegion { gl: gl.clone(), frag_shader_id, vert_shader_id, texture: tex, shader, quad, vertices: v_d }
     }
 
 }
@@ -169,14 +210,14 @@ impl SpriteBatch {
             
     }
 
-    pub fn draw(&mut self, sprite: &Sprite, projection: &Vec<f32>, x: f32, y: f32) {
-        self.count += 1;;
+    pub fn draw(&mut self, sprite: &TextureRegion, projection: &Vec<f32>, x: f32, y: f32) {
         let mut _vertices: Vec<f32> = sprite.quad.add(x, y).to_vertex_data();
         self.vertex_buffer.append(&mut _vertices);
         self.index_buffer.append(&mut vec![
             self.count * 4 + 0, self.count * 4 + 1, self.count * 4 + 3,
             self.count * 4 + 1, self.count * 4 + 2, self.count * 4 + 3,
         ]);
+        self.count += 1;
     }
 
     pub fn flush(&mut self) {
@@ -228,7 +269,7 @@ fn main() {
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
     gl_attr.set_context_version(4, 1);
 
-    let window = video_subsystem
+    let mut window = video_subsystem
         .window("Game", 900, 700)
         .opengl()
         .resizable()
@@ -271,12 +312,17 @@ fn main() {
         .flat_map(|z| z.iter())
         .cloned()
         .collect();
-    let sprite = Sprite::new(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id);
-    let mut locations_x: Vec<f32> = vec![0.0];
-    let mut locations_y: Vec<f32> = vec![0.0];
+    let sprite = TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 0.5, 0.7);
+    let sprite2 = TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 1.0, 1.0);
     let mut event_pump = sdl.event_pump().unwrap();
     let mut sprite_batch = SpriteBatch::new(&gl);
-    let mut e: Vec<Entity> = (0..1000)
+    let mut player = Entity {
+        x: 500.3,
+        y: 300.9,
+        vx: 0.0,
+        vy: 0.0,
+    };
+    let mut e: Vec<Entity> = (0..1)
         .map(|_| Entity {
             x: rng.gen_range(0.0, 900.0),
             y: rng.gen_range(0.0, 700.0),
@@ -286,10 +332,35 @@ fn main() {
         .collect();
 
     'main: loop {
-        let begin = time::Instant::now();
         for event in event_pump.poll_iter() {
             match event {
-                sdl2::event::Event::Quit { .. } => break 'main,
+                sdl2::event::Event::Quit { ..  } => break 'main,
+                sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Left), ..} => {
+                    player.vx = -2.0;
+                    player.vy = 0.0;
+                },
+                sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Right), ..} => {
+                    player.vx = 2.0;
+                    player.vy = 0.0;
+                },
+
+                sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Up), ..} => {
+                    player.vx = 0.0;
+                    player.vy = -2.0;
+                },
+
+                sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Down), ..} => {
+                    player.vx = 0.0;
+                    player.vy = 2.0;
+                },
+
+                sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::H), ..} => {
+                    window.set_fullscreen(sdl2::video::FullscreenType::Off);
+                },
+
+                sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::F), ..} => {
+                    window.set_fullscreen(sdl2::video::FullscreenType::Desktop);
+                },
                 _ => {}
             }
         }
@@ -308,7 +379,10 @@ fn main() {
                 d.y = d.y + d.vy;
                 d.x = d.x + d.vx;
             });
-            e.iter().for_each(|d| sprite_batch.draw(&sprite, &projection, d.x, d.y));
+            player.x += player.vx;
+            player.y += player.vy;
+            e.iter().for_each(|d| sprite_batch.draw(&sprite2, &projection, d.x, d.y));
+            sprite_batch.draw(&sprite, &projection, player.x, player.y);
         }
 
         sprite_batch.flush();
@@ -316,10 +390,8 @@ fn main() {
         window.gl_swap_window();
 
         use std::{thread, time};
-        use std::ops::Sub;
-        let end = time::Instant::now();
 
-        thread::sleep(time::Duration::from_millis(40));
+        thread::sleep(time::Duration::from_millis(20));
 
     }
 }
