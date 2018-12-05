@@ -109,32 +109,6 @@ impl Sprite {
             Sprite { gl: gl.clone(), frag_shader_id, vert_shader_id, texture: tex, shader, quad, vertices: v_d }
     }
 
-    pub fn draw(&self, projection: &Vec<f32>, x: f32, y: f32) {
-        let _vertices: Vec<f32> = self.quad.add(x, y).to_vertex_data();
-        /*
-        unsafe {
-            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-            self.gl.BufferSubData(gl::ARRAY_BUFFER,
-                                  0,
-                               (_vertices.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
-                               _vertices.as_ptr() as *const gl::types::GLvoid,
-                               
-            );
-            self.gl.BindBuffer(gl::ARRAY_BUFFER, 0);
-        }
-        unsafe {
-            self.gl.Uniform1i(self.gl.GetUniformLocation(self.frag_shader_id, CString::new("texture1").unwrap().as_ptr()), 0);
-            self.gl.UniformMatrix4fv(self.gl.GetUniformLocation(self.shader, CString::new("projectionmatrix").unwrap().as_ptr()), 1, gl::FALSE, projection.as_ptr() as *const f32);
-            self.gl.ActiveTexture(gl::TEXTURE0);
-            self.gl.BindTexture(gl::TEXTURE_2D, self.texture.id);
-            self.gl.BindVertexArray(self.vao);
-            self.gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ebo);
-            self.gl.DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
-        }
-        
-        */
-    }
-    
 }
 
 struct SpriteBatch {
@@ -150,15 +124,14 @@ struct SpriteBatch {
 impl SpriteBatch {
     pub fn new(gl: &gl::Gl) -> SpriteBatch {
         let mut result = SpriteBatch { gl: gl.clone(), vao: 0, vbo: 0, ebo: 0, vertex_buffer: Vec::with_capacity(400000), index_buffer: Vec::with_capacity(400000), count: 0};
-        let mut vbo: gl::types::GLuint = 0;
         unsafe {
             gl.GenBuffers(1, &mut result.vbo);
+            gl.BindBuffer(gl::ARRAY_BUFFER, result.vbo);
         }
 
-        let mut vao: gl::types::GLuint = 0;
         unsafe {
             gl.GenVertexArrays(1, &mut result.vao);
-            gl.BindVertexArray(vao);
+            gl.BindVertexArray(result.vao);
             gl.EnableVertexAttribArray(0);
             gl.VertexAttribPointer(0,
                                    4,
@@ -187,10 +160,9 @@ impl SpriteBatch {
             );
         }
 
-        let mut ebo: gl::types::GLuint = 0;
         unsafe {
             gl.GenBuffers(1, &mut result.ebo);
-            gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+            gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, result.ebo);
         }
         result
 
@@ -216,36 +188,6 @@ impl SpriteBatch {
                                self.vertex_buffer.as_ptr() as *const gl::types::GLvoid,
                                 gl::STATIC_DRAW
                                
-            );
-            // self.gl.BindBuffer(gl::ARRAY_BUFFER, 0);
-        }
-        unsafe {
-            self.gl.BindVertexArray(self.vao);
-            self.gl.EnableVertexAttribArray(0);
-            self.gl.VertexAttribPointer(0,
-                                   4,
-                                   gl::FLOAT,
-                                   gl::FALSE,
-                                   (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                                   std::ptr::null()
-            );
-            self.gl.EnableVertexAttribArray(1);
-            self.gl.VertexAttribPointer(1,
-                                   3,
-                                   gl::FLOAT,
-                                   gl::FALSE,
-                                   (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                                   (4 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid
-            );
-
-
-            self.gl.EnableVertexAttribArray(2);
-            self.gl.VertexAttribPointer(2,
-                                   2,
-                                   gl::FLOAT,
-                                   gl::FALSE,
-                                   (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                                   (7 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid
             );
         }
         unsafe {
@@ -326,7 +268,7 @@ fn main() {
     let mut locations_x: Vec<f32> = vec![0.0];
     let mut locations_y: Vec<f32> = vec![0.0];
     let mut event_pump = sdl.event_pump().unwrap();
-    for i in 0..5000 {
+    for _i in 0..500 {
         locations_x.push(rng.gen_range(0.0, 900.0));
         locations_y.push(rng.gen_range(0.0, 700.0));
     }
@@ -367,7 +309,7 @@ fn main() {
             println!("millis {}", end.sub(begin).subsec_millis())
         }
 
-        thread::sleep(time::Duration::from_millis(10));
+        thread::sleep(time::Duration::from_millis(40));
 
     }
 }
