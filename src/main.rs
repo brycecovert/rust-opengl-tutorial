@@ -2,7 +2,6 @@ extern crate gl;
 extern crate sdl2;
 extern crate rand;
 
-use std::fs::File;
 extern crate png;
 extern crate cgmath;
 
@@ -11,146 +10,12 @@ use cgmath::conv::*;
 use std::ffi::{CString};
 use rand::{thread_rng, Rng};
 
-
-struct TextureRegion {
-    pub gl: gl::Gl,
-    pub texture: render_gl::Texture,
-    pub shader: u32,
-    pub frag_shader_id: u32,
-    pub vert_shader_id: u32,
-    pub quad: Quad,
-    pub vertices: Vec<f32>,
-}
-
-#[derive(Debug, Clone)]
-struct Vertex {
-    pub pos: (f32, f32, f32),
-    pub color: (f32, f32, f32, f32),
-    pub uv: (f32, f32)
-}
-
-#[derive(Debug, Clone)]
-struct Quad (Vertex, Vertex, Vertex, Vertex);
-
-impl Quad {
-    fn to_vertex_data(&self) -> Vec<f32> {
-        vec![
-            self.0.pos.0, self.0.pos.1, self.0.pos.2,
-            self.0.color.0, self.0.color.1, self.0.color.2, self.0.color.3,
-            self.0.uv.0, self.0.uv.1,
-
-            self.1.pos.0, self.1.pos.1, self.1.pos.2,
-            self.1.color.0, self.1.color.1, self.1.color.2, self.1.color.3,
-            self.1.uv.0, self.1.uv.1,
-
-            self.2.pos.0, self.2.pos.1, self.2.pos.2,
-            self.2.color.0, self.2.color.1, self.2.color.2, self.2.color.3,
-            self.2.uv.0, self.2.uv.1,
-
-            self.3.pos.0, self.3.pos.1, self.3.pos.2,
-            self.3.color.0, self.3.color.1, self.3.color.2, self.3.color.3,
-            self.3.uv.0, self.3.uv.1,
-        ]
-    }
-
-    fn add(&self, x: f32,  y: f32) -> Quad {
-        let mut n = self.clone();
-        n.0.pos.0 += x;
-        n.1.pos.0 += x;
-        n.2.pos.0 += x;
-        n.3.pos.0 += x;
-
-        n.0.pos.1 += y;
-        n.1.pos.1 += y;
-        n.2.pos.1 += y;
-        n.3.pos.1 += y;
-        n
-    }
-}
-
-impl TextureRegion {
-    pub fn new_uv(gl: &gl::Gl, image: &str, vert_shader_id: u32, frag_shader_id: u32, shader: u32, u1: f32, v1: f32, u2: f32, v2: f32) -> TextureRegion {
-        let decoder = png::Decoder::new(File::open(image).unwrap());
-        let (info, mut reader) = decoder.read_info().unwrap();
-
-        let mut buf = vec![0; info.buffer_size()];
-        reader.next_frame(&mut buf).unwrap();
-
-        let tex = render_gl::Texture::from_image(&gl, info.width as i32, info.height as i32, buf).unwrap();
-
-        let quad = Quad(
-            Vertex {
-                pos: (info.width as f32, info.height as f32, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (u2, v2)
-            },
-            Vertex {
-                pos: (info.width as f32, 0.0, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (u2, v1)
-            },
-            Vertex {
-                pos: (0.0, 0.0, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (u1, v1)
-            },
-            Vertex {
-                pos: (0.0, info.height as f32, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (u1, v2)
-            },
-        );
+pub mod texture_region;
+pub mod quad;
+pub mod vertex;
+pub mod render_gl;
 
 
-        let vertices: Vec<f32> = quad.to_vertex_data();
-        println!("{:?}", vertices);
-        let v_d = quad.to_vertex_data();
-
-        TextureRegion { gl: gl.clone(), frag_shader_id, vert_shader_id, texture: tex, shader, quad, vertices: v_d }
-    }
-
-
-    pub fn new(gl: &gl::Gl, image: &str, vert_shader_id: u32, frag_shader_id: u32, shader: u32) -> TextureRegion {
-        let decoder = png::Decoder::new(File::open(image).unwrap());
-        let (info, mut reader) = decoder.read_info().unwrap();
-
-        let mut buf = vec![0; info.buffer_size()];
-        reader.next_frame(&mut buf).unwrap();
-
-        let tex = render_gl::Texture::from_image(&gl, info.width as i32, info.height as i32, buf).unwrap();
-
-        let quad = Quad(
-            Vertex {
-                pos: (info.width as f32, info.height as f32, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (1.0, 1.0)
-            },
-            Vertex {
-                pos: (info.width as f32, 0.0, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (1.0, 0.0)
-            },
-            Vertex {
-                pos: (0.0, 0.0, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (0.0, 0.0)
-            },
-            Vertex {
-                pos: (0.0, info.height as f32, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (0.0, 1.0)
-            },
-        );
-
-
-        let vertices: Vec<f32> = quad.to_vertex_data();
-        println!("{:?}", vertices);
-        let v_d = quad.to_vertex_data();
-
-        TextureRegion { gl: gl.clone(), frag_shader_id, vert_shader_id, texture: tex, shader, quad, vertices: v_d }
-    }
-
-}
 
 struct SpriteBatch {
     gl: gl::Gl,
@@ -210,7 +75,7 @@ impl SpriteBatch {
             
     }
 
-    pub fn draw(&mut self, sprite: &TextureRegion, projection: &Vec<f32>, x: f32, y: f32) {
+    pub fn draw(&mut self, sprite: &texture_region::TextureRegion, projection: &Vec<f32>, x: f32, y: f32) {
         let mut _vertices: Vec<f32> = sprite.quad.add(x, y).to_vertex_data();
         self.vertex_buffer.append(&mut _vertices);
         self.index_buffer.append(&mut vec![
@@ -259,7 +124,6 @@ struct Entity {
 }
 
 
-pub mod render_gl;
 fn main() {
     let mut rng = thread_rng();
     let sdl = sdl2::init().unwrap();
@@ -312,8 +176,8 @@ fn main() {
         .flat_map(|z| z.iter())
         .cloned()
         .collect();
-    let sprite = TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 0.5, 0.7);
-    let sprite2 = TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 1.0, 1.0);
+    let sprite = texture_region::TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 0.5, 0.7);
+    let sprite2 = texture_region::TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 1.0, 1.0);
     let mut event_pump = sdl.event_pump().unwrap();
     let mut sprite_batch = SpriteBatch::new(&gl);
     let mut player = Entity {
