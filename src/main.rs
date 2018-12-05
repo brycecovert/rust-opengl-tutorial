@@ -210,6 +210,13 @@ impl SpriteBatch {
 }
 
 
+struct Entity {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32
+}
+
 
 pub mod render_gl;
 fn main() {
@@ -268,12 +275,15 @@ fn main() {
     let mut locations_x: Vec<f32> = vec![0.0];
     let mut locations_y: Vec<f32> = vec![0.0];
     let mut event_pump = sdl.event_pump().unwrap();
-    for _i in 0..500 {
-        locations_x.push(rng.gen_range(0.0, 900.0));
-        locations_y.push(rng.gen_range(0.0, 700.0));
-    }
-
     let mut sprite_batch = SpriteBatch::new(&gl);
+    let mut e: Vec<Entity> = (0..1000)
+        .map(|_| Entity {
+            x: rng.gen_range(0.0, 900.0),
+            y: rng.gen_range(0.0, 700.0),
+            vx: rng.gen_range(-4.0, 4.0),
+            vy: rng.gen_range(-4.0, 4.0),
+        })
+        .collect();
 
     'main: loop {
         let begin = time::Instant::now();
@@ -294,8 +304,11 @@ fn main() {
             gl.UniformMatrix4fv(gl.GetUniformLocation(shader_program.id, CString::new("projectionmatrix").unwrap().as_ptr()), 1, gl::FALSE, projection.as_ptr() as *const f32);
             gl.ActiveTexture(gl::TEXTURE0);
             gl.BindTexture(gl::TEXTURE_2D, sprite.texture.id);
-            let r: f32 = rng.gen();
-            locations_x.iter().zip(locations_y.iter()).for_each(|(x, y)| sprite_batch.draw(&sprite, &projection, *x, *y * r));
+            e.iter_mut().for_each(|d| {
+                d.y = d.y + d.vy;
+                d.x = d.x + d.vx;
+            });
+            e.iter().for_each(|d| sprite_batch.draw(&sprite, &projection, d.x, d.y));
         }
 
         sprite_batch.flush();
@@ -305,9 +318,6 @@ fn main() {
         use std::{thread, time};
         use std::ops::Sub;
         let end = time::Instant::now();
-        if rng.gen_range(0, 10) == 0 {
-            println!("millis {}", end.sub(begin).subsec_millis())
-        }
 
         thread::sleep(time::Duration::from_millis(40));
 
