@@ -5,7 +5,6 @@ extern crate rand;
 extern crate png;
 extern crate cgmath;
 
-use cgmath::conv::*;
 
 use std::ffi::{CString};
 use rand::{thread_rng, Rng};
@@ -83,20 +82,15 @@ fn main() {
         include_str!("triangle.vert")
     ).expect("There should be no problem vert");
 
-    let vert_shader_id = vert_shader.id;
-
     let frag_shader = render_gl::Shader::from_frag_source(
         &gl,
         include_str!("triangle.frag")
     ).expect("There should be no problem frag");
 
-    let frag_shader_id = frag_shader.id;
     let shader_program = render_gl::Program::from_shaders(
         &gl,
         &[vert_shader, frag_shader]
     ).unwrap();
-
-    shader_program.set_used();
 
     println!("shader id: {}", shader_program.id);
     unsafe {
@@ -105,15 +99,10 @@ fn main() {
     }
 
     let ortho_matrix = cgmath::ortho(0.0, 1280.0, 760.0, 0.0, 0.0, 1.0);
-    let x = array4x4(ortho_matrix);
-    let projection: Vec<f32> = x.iter()
-        .flat_map(|z| z.iter())
-        .cloned()
-        .collect();
-    let sprite = texture_region::TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 1.0, 1.0);
+    let sprite = texture_region::TextureRegion::new_uv(&gl, "tongue-hit_0.png", 0.0, 0.0, 1.0, 1.0);
     let mut event_pump = sdl.event_pump().unwrap();
-    let mut sprite_batch = SpriteBatch::new(&gl);
-    let mut enemy = texture_region::TextureRegion::new(&gl, "enemy.png", vert_shader_id, frag_shader_id, shader_program.id);
+    let mut enemy = texture_region::TextureRegion::new(&gl, "enemy.png");
+    let mut sprite_batch = SpriteBatch::new(&gl, &shader_program, ortho_matrix);
     let mut player = Entity {
         width: 119.0,
         height: 134.0,
@@ -169,22 +158,17 @@ fn main() {
             }
         }
 
-        shader_program.set_used();
         unsafe {
             gl.Clear(gl::COLOR_BUFFER_BIT);
-            gl.Enable(gl::BLEND);
-            gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
-            gl.Uniform1i(gl.GetUniformLocation(shader_program.id, CString::new("texture1").unwrap().as_ptr()), 0);
-            gl.UniformMatrix4fv(gl.GetUniformLocation(shader_program.id, CString::new("projectionmatrix").unwrap().as_ptr()), 1, gl::FALSE, projection.as_ptr() as *const f32);
             e.iter_mut().for_each(|d| {
                 d.y = d.y + d.vy;
                 d.x = d.x + d.vx;
             });
             player.x += player.vx;
             player.y += player.vy;
-            e.iter().for_each(|d| sprite_batch.draw(&enemy, &d.to_quad(), &projection));
-            sprite_batch.draw(&sprite, &player.to_quad(), &projection);
+            e.iter().for_each(|d| sprite_batch.draw(&enemy, &d.to_quad()));
+            sprite_batch.draw(&sprite, &player.to_quad());
         }
 
         sprite_batch.flush();

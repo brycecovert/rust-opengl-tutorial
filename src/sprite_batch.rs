@@ -1,20 +1,32 @@
 use texture_region::TextureRegion;
 use quad::Quad;
+use render_gl::Program;
+use cgmath::Matrix4;
+use cgmath::conv::array4x4;
+use std::ffi::{CString};
 
-pub struct SpriteBatch {
+pub struct SpriteBatch<'a> {
     gl: gl::Gl,
+    shader_program: &'a Program,
     pub vao: u32,
     pub vbo: u32,
     pub ebo: u32,
     vertex_buffer: Vec<f32>,
     index_buffer: Vec<u32>,
     count: u32,
-    current_texture: u32
+    current_texture: u32,
+    projection: Vec<f32>
+
 }
 
-impl SpriteBatch {
-    pub fn new(gl: &gl::Gl) -> SpriteBatch {
-        let mut result = SpriteBatch { gl: gl.clone(), vao: 0, vbo: 0, ebo: 0, vertex_buffer: Vec::with_capacity(400000), index_buffer: Vec::with_capacity(400000), count: 0, current_texture: 0};
+impl <'a> SpriteBatch<'a> {
+    pub fn new(gl: &gl::Gl, shader_program: &'a Program, projection: Matrix4<f32>) -> SpriteBatch<'a> {
+        let projection: Vec<f32> = array4x4(projection).iter()
+            .flat_map(|z| z.iter())
+            .cloned()
+            .collect();
+
+        let mut result = SpriteBatch { gl: gl.clone(), vao: 0, vbo: 0, ebo: 0, vertex_buffer: Vec::with_capacity(400000), index_buffer: Vec::with_capacity(400000), count: 0, current_texture: 0, shader_program, projection};
         unsafe {
             gl.GenBuffers(1, &mut result.vbo);
             gl.BindBuffer(gl::ARRAY_BUFFER, result.vbo);
@@ -60,7 +72,7 @@ impl SpriteBatch {
             
     }
 
-    pub fn draw(&mut self, sprite: &TextureRegion, quad: &Quad, _projection: &Vec<f32>) {
+    pub fn draw(&mut self, sprite: &TextureRegion, quad: &Quad) {
         let mut _vertices: Vec<f32> = quad.to_vertex_data();
         if self.current_texture != sprite.texture.id {
             self.flush();
@@ -81,6 +93,13 @@ impl SpriteBatch {
 
     pub fn flush(&mut self) {
         self.count = 0;
+        self.shader_program.set_used();
+        unsafe {
+            self.gl.UniformMatrix4fv(self.gl.GetUniformLocation(self.shader_program.id, CString::new("projectionmatrix").unwrap().as_ptr()), 1, gl::FALSE, self.projection.as_ptr() as *const f32);
+            self.gl.Uniform1i(self.gl.GetUniformLocation(self.shader_program.id, CString::new("texture1").unwrap().as_ptr()), 0);
+            self.gl.Enable(gl::BLEND);
+            self.gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        }
         unsafe {
             self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
             self.gl.BufferData (gl::ARRAY_BUFFER,
