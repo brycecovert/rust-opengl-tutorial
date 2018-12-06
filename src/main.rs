@@ -7,7 +7,6 @@ extern crate cgmath;
 extern crate time;
 
 
-use std::ffi::{CString};
 use rand::{thread_rng, Rng};
 use time::precise_time_s;
 
@@ -59,6 +58,30 @@ impl<'a> Entity <'a> {
     }
 }
 
+struct World<'a> {
+    player: Entity<'a>,
+    enemies: Vec<Entity<'a>>
+}
+
+fn update(world: &mut World) {
+    world.enemies.iter_mut().for_each(|d| {
+        d.y = d.y + d.vy;
+        d.x = d.x + d.vx;
+    });
+    world.player.x += world.player.vx;
+    world.player.y += world.player.vy;
+}
+
+fn render(gl: &gl::Gl, world: &World, sprite_batch: &mut SpriteBatch) {
+    unsafe {
+        gl.Clear(gl::COLOR_BUFFER_BIT);
+        world.enemies.iter().for_each(|d| sprite_batch.draw(&d.texture_region, &d.to_quad()));
+        sprite_batch.draw(&world.player.texture_region, &world.player.to_quad());
+    }
+
+    sprite_batch.flush();
+}
+
 
 fn main() {
     let mut rng = thread_rng();
@@ -71,7 +94,6 @@ fn main() {
 
     let mut window = video_subsystem
         .window("Game", 1280, 760)
-        .fullscreen()
         .opengl()
         .resizable()
         .build()
@@ -106,26 +128,28 @@ fn main() {
     let mut event_pump = sdl.event_pump().unwrap();
     let mut enemy = texture_region::TextureRegion::new(&gl, "enemy.png");
     let mut sprite_batch = SpriteBatch::new(&gl, &shader_program, ortho_matrix);
-    let mut player = Entity {
-        width: 119.0,
-        height: 134.0,
-        texture_region: &sprite,
-        x: 500.3,
-        y: 300.9,
-        vx: 0.0,
-        vy: 0.0,
-    };
-    let mut e: Vec<Entity> = (0..100)
-        .map(|_| Entity {
+    let mut world = World {
+        player: Entity {
             width: 119.0,
             height: 134.0,
-            texture_region: &enemy,
-            x: rng.gen_range(0.0, 1280.0),
-            y: rng.gen_range(0.0, 760.0),
-            vx: rng.gen_range(-4.0, 4.0),
-            vy: rng.gen_range(-4.0, 4.0),
-        })
-        .collect();
+            texture_region: &sprite,
+            x: 500.3,
+            y: 300.9,
+            vx: 0.0,
+            vy: 0.0,
+        },
+        enemies: (0..100)
+            .map(|_| Entity {
+                width: 119.0,
+                height: 134.0,
+                texture_region: &enemy,
+                x: rng.gen_range(0.0, 1280.0),
+                y: rng.gen_range(0.0, 760.0),
+                vx: rng.gen_range(-4.0, 4.0),
+                vy: rng.gen_range(-4.0, 4.0),
+            })
+            .collect() 
+    };
 
     let update_time: f64 = 0.01;
     let mut current_time: f64 = precise_time_s();
@@ -148,18 +172,18 @@ fn main() {
             match event {
                 sdl2::event::Event::Quit { ..  } | sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Q), ..} => break 'main,
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Left), ..} => {
-                    player.vx = -2.0;
+                    world.player.vx = -2.0;
                 },
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Right), ..} => {
-                    player.vx = 2.0;
+                    world.player.vx = 2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Up), ..} => {
-                    player.vy = -2.0;
+                    world.player.vy = -2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Down), ..} => {
-                    player.vy = 2.0;
+                    world.player.vy = 2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::H), ..} => {
@@ -171,43 +195,27 @@ fn main() {
                 },
 
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Left), ..} => {
-                    player.vx = 0.0;
+                    world.player.vx = 0.0;
                 },
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Up), ..} => {
-                    player.vy = 0.0;
+                    world.player.vy = 0.0;
                 },
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Right), ..} => {
-                    player.vx = 0.0;
+                    world.player.vx = 0.0;
                 },
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Down), ..} => {
-                    player.vy = 0.0;
+                    world.player.vy = 0.0;
                 },
                 _ => {}
             }
         }
 
-        let mut iterations = 0;
         while accumulator >= update_time {
-            iterations += 1;
-            e.iter_mut().for_each(|d| {
-                d.y = d.y + d.vy;
-                d.x = d.x + d.vx;
-            });
-            player.x += player.vx;
-            player.y += player.vy;
+            update(&mut world);
             accumulator -= update_time;
         }
 
-        unsafe {
-            gl.Clear(gl::COLOR_BUFFER_BIT);
-
-            e.iter().for_each(|d| sprite_batch.draw(&enemy, &d.to_quad()));
-            sprite_batch.draw(&sprite, &player.to_quad());
-        }
-
-        sprite_batch.flush();
-
+        render(&gl, &world, &mut sprite_batch);
         window.gl_swap_window();
-
     }
 }
