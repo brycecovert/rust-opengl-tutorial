@@ -154,6 +154,19 @@ fn main() {
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::F), ..} => {
                     window.set_fullscreen(sdl2::video::FullscreenType::Desktop).unwrap();
                 },
+
+                sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Left), ..} => {
+                    player.vx = 0.0;
+                },
+                sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Up), ..} => {
+                    player.vy = 0.0;
+                },
+                sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Right), ..} => {
+                    player.vx = 0.0;
+                },
+                sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Down), ..} => {
+                    player.vy = 0.0;
+                },
                 _ => {}
             }
         }
