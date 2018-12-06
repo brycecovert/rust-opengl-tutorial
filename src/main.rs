@@ -14,113 +14,48 @@ pub mod texture_region;
 pub mod quad;
 pub mod vertex;
 pub mod render_gl;
+pub mod sprite_batch;
 
+use sprite_batch::SpriteBatch;
+use texture_region::TextureRegion;
+use quad::Quad;
+use vertex::Vertex;
 
-
-struct SpriteBatch {
-    gl: gl::Gl,
-    pub vao: u32,
-    pub vbo: u32,
-    pub ebo: u32,
-    vertex_buffer: Vec<f32>,
-    index_buffer: Vec<u32>,
-    count: u32
-}
-
-impl SpriteBatch {
-    pub fn new(gl: &gl::Gl) -> SpriteBatch {
-        let mut result = SpriteBatch { gl: gl.clone(), vao: 0, vbo: 0, ebo: 0, vertex_buffer: Vec::with_capacity(400000), index_buffer: Vec::with_capacity(400000), count: 0};
-        unsafe {
-            gl.GenBuffers(1, &mut result.vbo);
-            gl.BindBuffer(gl::ARRAY_BUFFER, result.vbo);
-        }
-
-        unsafe {
-            gl.GenVertexArrays(1, &mut result.vao);
-            gl.BindVertexArray(result.vao);
-            gl.EnableVertexAttribArray(0);
-            gl.VertexAttribPointer(0,
-                                   4,
-                                   gl::FLOAT,
-                                   gl::FALSE,
-                                   (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                                   std::ptr::null()
-            );
-            gl.EnableVertexAttribArray(1);
-            gl.VertexAttribPointer(1,
-                                   3,
-                                   gl::FLOAT,
-                                   gl::FALSE,
-                                   (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                                   (4 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid
-            );
-
-
-            gl.EnableVertexAttribArray(2);
-            gl.VertexAttribPointer(2,
-                                   2,
-                                   gl::FLOAT,
-                                   gl::FALSE,
-                                   (9 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                                   (7 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid
-            );
-        }
-
-        unsafe {
-            gl.GenBuffers(1, &mut result.ebo);
-            gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, result.ebo);
-        }
-        result
-
-            
-    }
-
-    pub fn draw(&mut self, sprite: &texture_region::TextureRegion, projection: &Vec<f32>, x: f32, y: f32) {
-        let mut _vertices: Vec<f32> = sprite.quad.add(x, y).to_vertex_data();
-        self.vertex_buffer.append(&mut _vertices);
-        self.index_buffer.append(&mut vec![
-            self.count * 4 + 0, self.count * 4 + 1, self.count * 4 + 3,
-            self.count * 4 + 1, self.count * 4 + 2, self.count * 4 + 3,
-        ]);
-        self.count += 1;
-    }
-
-    pub fn flush(&mut self) {
-        self.count = 0;
-        unsafe {
-            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-            self.gl.BufferData (gl::ARRAY_BUFFER,
-                               (self.vertex_buffer.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
-                               self.vertex_buffer.as_ptr() as *const gl::types::GLvoid,
-                                gl::STATIC_DRAW
-                               
-            );
-        }
-        unsafe {
-            self.gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ebo);
-            self.gl.BufferData(gl::ELEMENT_ARRAY_BUFFER,
-                          (self.index_buffer.len() * std::mem::size_of::<i32>()) as gl::types::GLsizeiptr,
-                          self.index_buffer.as_ptr() as *const gl::types::GLvoid,
-                          gl::STATIC_DRAW);
-        }
-        unsafe {
-            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-            self.gl.BindVertexArray(self.vao);
-            self.gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ebo);
-            self.gl.DrawElements(gl::TRIANGLES, self.index_buffer.len() as i32, gl::UNSIGNED_INT, std::ptr::null());
-        }
-
-        self.vertex_buffer.clear();
-        self.index_buffer.clear();
-    }
-}
-
-
-struct Entity {
+struct Entity <'a> {
     x: f32,
     y: f32,
     vx: f32,
-    vy: f32
+    vy: f32,
+    texture_region: &'a TextureRegion,
+    width: f32,
+    height: f32
+}
+
+impl<'a> Entity <'a> {
+    pub fn to_quad(&self) -> Quad {
+        Quad::new(
+            Vertex {
+                pos: (self.width + self.x, self.y + self.height, 0.0),
+                color: (1.0, 1.0, 1.0, 1.0),
+                uv: (self.texture_region.u2, self.texture_region.v2)
+            },
+            Vertex {
+                pos: (self.x + self.width, self.y, 0.0),
+                color: (1.0, 1.0, 1.0, 1.0),
+                uv: (self.texture_region.u2, self.texture_region.v1)
+            },
+            Vertex {
+                pos: (self.x, self.y, 0.0),
+                color: (1.0, 1.0, 1.0, 1.0),
+                uv: (self.texture_region.u1, self.texture_region.v1)
+            },
+            Vertex {
+                pos: (self.x, self.y + self.height, 0.0),
+                color: (1.0, 1.0, 1.0, 1.0),
+                uv: (self.texture_region.u1, self.texture_region.v2)
+            },
+        )
+    }
 }
 
 
@@ -134,7 +69,7 @@ fn main() {
     gl_attr.set_context_version(4, 1);
 
     let mut window = video_subsystem
-        .window("Game", 900, 700)
+        .window("Game", 1280, 760)
         .opengl()
         .resizable()
         .build()
@@ -142,7 +77,6 @@ fn main() {
 
     let _gl_context = window.gl_create_context().unwrap();
     let gl = gl::Gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
-
 
     let vert_shader = render_gl::Shader::from_vert_source(
         &gl,
@@ -166,30 +100,36 @@ fn main() {
 
     println!("shader id: {}", shader_program.id);
     unsafe {
-        gl.Viewport(0, 0, 900, 700);
-        gl.ClearColor(0.3, 0.3, 0.5, 1.0);
+        gl.Viewport(0, 0, 1280, 760);
+        gl.ClearColor(0.1, 0.1, 0.1, 1.0);
     }
 
-    let ortho_matrix = cgmath::ortho(0.0, 900.0, 700.0, 0.0, 0.0, 1.0);
+    let ortho_matrix = cgmath::ortho(0.0, 1280.0, 760.0, 0.0, 0.0, 1.0);
     let x = array4x4(ortho_matrix);
     let projection: Vec<f32> = x.iter()
         .flat_map(|z| z.iter())
         .cloned()
         .collect();
-    let sprite = texture_region::TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 0.5, 0.7);
-    let sprite2 = texture_region::TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 1.0, 1.0);
+    let sprite = texture_region::TextureRegion::new_uv(&gl, "tongue-hit_0.png", vert_shader_id, frag_shader_id, shader_program.id, 0.0, 0.0, 1.0, 1.0);
     let mut event_pump = sdl.event_pump().unwrap();
     let mut sprite_batch = SpriteBatch::new(&gl);
+    let mut enemy = texture_region::TextureRegion::new(&gl, "enemy.png", vert_shader_id, frag_shader_id, shader_program.id);
     let mut player = Entity {
+        width: 119.0,
+        height: 134.0,
+        texture_region: &sprite,
         x: 500.3,
         y: 300.9,
         vx: 0.0,
         vy: 0.0,
     };
-    let mut e: Vec<Entity> = (0..1)
+    let mut e: Vec<Entity> = (0..100)
         .map(|_| Entity {
-            x: rng.gen_range(0.0, 900.0),
-            y: rng.gen_range(0.0, 700.0),
+            width: 119.0,
+            height: 134.0,
+            texture_region: &enemy,
+            x: rng.gen_range(0.0, 1280.0),
+            y: rng.gen_range(0.0, 760.0),
             vx: rng.gen_range(-4.0, 4.0),
             vy: rng.gen_range(-4.0, 4.0),
         })
@@ -219,11 +159,11 @@ fn main() {
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::H), ..} => {
-                    window.set_fullscreen(sdl2::video::FullscreenType::Off);
+                    window.set_fullscreen(sdl2::video::FullscreenType::Off).unwrap();
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::F), ..} => {
-                    window.set_fullscreen(sdl2::video::FullscreenType::Desktop);
+                    window.set_fullscreen(sdl2::video::FullscreenType::Desktop).unwrap();
                 },
                 _ => {}
             }
@@ -237,16 +177,14 @@ fn main() {
 
             gl.Uniform1i(gl.GetUniformLocation(shader_program.id, CString::new("texture1").unwrap().as_ptr()), 0);
             gl.UniformMatrix4fv(gl.GetUniformLocation(shader_program.id, CString::new("projectionmatrix").unwrap().as_ptr()), 1, gl::FALSE, projection.as_ptr() as *const f32);
-            gl.ActiveTexture(gl::TEXTURE0);
-            gl.BindTexture(gl::TEXTURE_2D, sprite.texture.id);
             e.iter_mut().for_each(|d| {
                 d.y = d.y + d.vy;
                 d.x = d.x + d.vx;
             });
             player.x += player.vx;
             player.y += player.vy;
-            e.iter().for_each(|d| sprite_batch.draw(&sprite2, &projection, d.x, d.y));
-            sprite_batch.draw(&sprite, &projection, player.x, player.y);
+            e.iter().for_each(|d| sprite_batch.draw(&enemy, &d.to_quad(), &projection));
+            sprite_batch.draw(&sprite, &player.to_quad(), &projection);
         }
 
         sprite_batch.flush();
@@ -255,7 +193,7 @@ fn main() {
 
         use std::{thread, time};
 
-        thread::sleep(time::Duration::from_millis(20));
+        thread::sleep(time::Duration::from_millis(30));
 
     }
 }
