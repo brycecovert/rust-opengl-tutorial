@@ -4,10 +4,12 @@ extern crate rand;
 
 extern crate png;
 extern crate cgmath;
+extern crate time;
 
 
 use std::ffi::{CString};
 use rand::{thread_rng, Rng};
+use time::precise_time_s;
 
 pub mod texture_region;
 pub mod quad;
@@ -69,6 +71,7 @@ fn main() {
 
     let mut window = video_subsystem
         .window("Game", 1280, 760)
+        .fullscreen()
         .opengl()
         .resizable()
         .build()
@@ -124,26 +127,38 @@ fn main() {
         })
         .collect();
 
+    let update_time: f64 = 0.01;
+    let mut current_time: f64 = precise_time_s();
+    let mut accumulator: f64 = 0.0;
+    let mut s: i32 = current_time as i32;
+    let mut frame_count = 0;
     'main: loop {
+        frame_count += 1;
+        let start_time: f64 = precise_time_s();
+        let last_frame_time = start_time - current_time;
+        current_time = start_time;
+        if current_time as i32 != s {
+            s = current_time as i32;
+            println!("FPS {}", frame_count);
+            frame_count = 0;
+        }
+
+        accumulator += last_frame_time;
         for event in event_pump.poll_iter() {
             match event {
-                sdl2::event::Event::Quit { ..  } => break 'main,
+                sdl2::event::Event::Quit { ..  } | sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Q), ..} => break 'main,
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Left), ..} => {
                     player.vx = -2.0;
-                    player.vy = 0.0;
                 },
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Right), ..} => {
                     player.vx = 2.0;
-                    player.vy = 0.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Up), ..} => {
-                    player.vx = 0.0;
                     player.vy = -2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Down), ..} => {
-                    player.vx = 0.0;
                     player.vy = 2.0;
                 },
 
@@ -171,15 +186,21 @@ fn main() {
             }
         }
 
-        unsafe {
-            gl.Clear(gl::COLOR_BUFFER_BIT);
-
+        let mut iterations = 0;
+        while accumulator >= update_time {
+            iterations += 1;
             e.iter_mut().for_each(|d| {
                 d.y = d.y + d.vy;
                 d.x = d.x + d.vx;
             });
             player.x += player.vx;
             player.y += player.vy;
+            accumulator -= update_time;
+        }
+
+        unsafe {
+            gl.Clear(gl::COLOR_BUFFER_BIT);
+
             e.iter().for_each(|d| sprite_batch.draw(&enemy, &d.to_quad()));
             sprite_batch.draw(&sprite, &player.to_quad());
         }
@@ -187,10 +208,6 @@ fn main() {
         sprite_batch.flush();
 
         window.gl_swap_window();
-
-        use std::{thread, time};
-
-        thread::sleep(time::Duration::from_millis(30));
 
     }
 }
