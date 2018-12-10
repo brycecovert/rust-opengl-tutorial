@@ -47,23 +47,17 @@ struct World<'a> {
     texture_regioned: HashMap<Entity, TextureRegioned<'a>>,
 }
 
-
-
 impl <'a> World <'a> {
-    /*
-    fn new() -> World {
+    fn new() -> World<'a> {
         World {
             last_id: 0,
             entities: Vec::new(),
             positions: HashMap::new(),
             velocities: HashMap::new(),
             sizes: HashMap::new(),
-            texture_regions: HashMap::new(),
-
-            
+            texture_regioned: HashMap::new(),
         }
     }
-    */
     fn create_entity(&mut self, p: Position, v: Velocity, s: Sized, t: TextureRegioned<'a>)  -> Entity {
         self.last_id += 1;
         let id = self.last_id;;
@@ -178,16 +172,7 @@ fn main() {
     let mut event_pump = sdl.event_pump().unwrap();
     let mut enemy = texture_region::TextureRegion::new(&gl, "enemy.png");
     let mut sprite_batch = SpriteBatch::new(&gl, &shader_program, ortho_matrix);
-    let mut world = World {
-            last_id: 0,
-            entities: Vec::with_capacity(10000),
-            positions: HashMap::with_capacity(10000),
-            velocities: HashMap::with_capacity(10000),
-            sizes: HashMap::with_capacity(10000),
-        texture_regioned: HashMap::with_capacity(10000),
-
-            
-        }
+    let mut world = World::new();
 ;
     let player = world.create_entity(Position(500.0, 300.0), Velocity(0.0, 0.0), Sized(119.0, 134.0), TextureRegioned(&sprite));
     {
