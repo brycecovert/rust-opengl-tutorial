@@ -6,95 +6,28 @@ extern crate png;
 extern crate cgmath;
 extern crate time;
 extern crate hashbrown;
-use hashbrown::HashMap;
 
 
 use rand::{thread_rng, Rng};
 use time::precise_time_s;
 // use std::collections::HashMap;
 
+pub mod world;
 pub mod texture_region;
 pub mod quad;
 pub mod vertex;
 pub mod render_gl;
 pub mod sprite_batch;
+pub mod component;
+pub mod entity;
+pub mod system;
 
 use sprite_batch::SpriteBatch;
-use texture_region::TextureRegion;
-use quad::Quad;
-use vertex::Vertex;
+use world::World;
+use system::render;
+use component::{Position, Velocity, Sized, TextureRegioned};
 
-trait Component {
-}
 
-pub struct Position(f32, f32);
-pub struct Velocity(f32, f32);
-pub struct Sized(f32, f32);
-pub struct TextureRegioned<'a> (&'a TextureRegion);
-
-impl Component for Position {}
-impl Component for Velocity {}
-impl Component for Sized {}
-#[derive(Hash, Eq, PartialEq, Clone, Copy)]
-struct Entity (u32);
-
-struct World<'a> {
-    last_id: u32,
-    entities: Vec<Entity>,
-    positions: HashMap<Entity, Position>,
-    velocities: HashMap<Entity, Velocity>,
-    sizes: HashMap<Entity, Sized>,
-    texture_regioned: HashMap<Entity, TextureRegioned<'a>>,
-}
-
-impl <'a> World <'a> {
-    fn new() -> World<'a> {
-        World {
-            last_id: 0,
-            entities: Vec::new(),
-            positions: HashMap::new(),
-            velocities: HashMap::new(),
-            sizes: HashMap::new(),
-            texture_regioned: HashMap::new(),
-        }
-    }
-    fn create_entity(&mut self, p: Position, v: Velocity, s: Sized, t: TextureRegioned<'a>)  -> Entity {
-        self.last_id += 1;
-        let id = self.last_id;;
-        let e = Entity(id);
-        self.positions.insert(e, p);
-        self.velocities.insert(e, v);
-        self.sizes.insert(e, s);
-        self.texture_regioned.insert(e, t);
-        self.entities.push(e);
-        e
-    }
-}
-
-pub fn to_quad(p: &Position, s: &Sized, t: &TextureRegion) -> Quad {
-    Quad::new(
-        Vertex {
-            pos: (s.0 + p.0, p.1 + s.1, 0.0),
-            color: (1.0, 1.0, 1.0, 1.0),
-            uv: (t.u2, t.v2)
-        },
-        Vertex {
-            pos: (p.0 + s.0, p.1, 0.0),
-            color: (1.0, 1.0, 1.0, 1.0),
-            uv: (t.u2, t.v1)
-        },
-        Vertex {
-            pos: (p.0, p.1, 0.0),
-            color: (1.0, 1.0, 1.0, 1.0),
-            uv: (t.u1, t.v1)
-        },
-        Vertex {
-            pos: (p.0, p.1 + s.1, 0.0),
-            color: (1.0, 1.0, 1.0, 1.0),
-            uv: (t.u1, t.v2)
-        },
-    )
-}
 
 fn update(world: &mut World) {
     let positions = &mut world.positions;
@@ -103,28 +36,12 @@ fn update(world: &mut World) {
         .iter()
         .for_each(|e| {
             let (position, velocity) = (positions.get_mut(e).unwrap(), velocities.get(e).unwrap());
-            position.0 += velocity.0;
-            position.1 += velocity.1;
+            position.x += velocity.x;
+            position.y += velocity.y;
             
         });
 }
 
-
-fn render(gl: &gl::Gl, world: &World, sprite_batch: &mut SpriteBatch) {
-    unsafe {
-        gl.Clear(gl::COLOR_BUFFER_BIT);
-        world.entities
-            .iter()
-            .for_each(|e| {
-                let (position, size, texture_regioned) = (world.positions.get(e).unwrap(), world.sizes.get(e).unwrap(), world.texture_regioned.get(e).unwrap());
-                sprite_batch.draw(&texture_regioned.0, &to_quad(&position, &size, &texture_regioned.0));
-
-                
-            });
-    }
-
-    sprite_batch.flush();
-}
 
 
 fn main() {
@@ -174,10 +91,10 @@ fn main() {
     let mut sprite_batch = SpriteBatch::new(&gl, &shader_program, ortho_matrix);
     let mut world = World::new();
 ;
-    let player = world.create_entity(Position(500.0, 300.0), Velocity(0.0, 0.0), Sized(119.0, 134.0), TextureRegioned(&sprite));
+    let player = world.create_entity(Position::new(500.0, 300.0), Velocity::new(0.0, 0.0), Sized::new(119.0, 134.0), TextureRegioned::new(&sprite));
     {
     (0..1000)
-        .for_each(|_| { world.create_entity(Position(rng.gen_range(0.0, 1280.0), rng.gen_range(0.0, 1280.0)), Velocity(rng.gen_range(-0.1, 0.1), rng.gen_range(-0.1, 0.1)), Sized(119.0, 134.0), TextureRegioned(&enemy));
+        .for_each(|_| { world.create_entity(Position::new(rng.gen_range(0.0, 1280.0), rng.gen_range(0.0, 1280.0)), Velocity::new(rng.gen_range(-0.1, 0.1), rng.gen_range(-0.1, 0.1)), Sized::new(119.0, 134.0), TextureRegioned::new(&enemy));
 
         });
 }
@@ -202,18 +119,18 @@ fn main() {
             match event {
                 sdl2::event::Event::Quit { ..  } | sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Q), ..} => break 'main,
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Left), ..} => {
-                    world.velocities.get_mut(&player).unwrap().0 = -2.0;
+                    world.velocities.get_mut(&player).unwrap().x = -2.0;
                 },
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Right), ..} => {
-                    world.velocities.get_mut(&player).unwrap().0 = 2.0;
+                    world.velocities.get_mut(&player).unwrap().x = 2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Up), ..} => {
-                    world.velocities.get_mut(&player).unwrap().1 = -2.0;
+                    world.velocities.get_mut(&player).unwrap().y = -2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Down), ..} => {
-                    world.velocities.get_mut(&player).unwrap().1 = 2.0;
+                    world.velocities.get_mut(&player).unwrap().y = 2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::H), ..} => {
@@ -225,16 +142,16 @@ fn main() {
                 },
 
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Left), ..} => {
-                    world.velocities.get_mut(&player).unwrap().0 = 0.0;
+                    world.velocities.get_mut(&player).unwrap().x = 0.0;
                 },
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Up), ..} => {
-                    world.velocities.get_mut(&player).unwrap().1 = 0.0;
+                    world.velocities.get_mut(&player).unwrap().y = 0.0;
                 },
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Right), ..} => {
-                    world.velocities.get_mut(&player).unwrap().0 = 0.0;
+                    world.velocities.get_mut(&player).unwrap().x = 0.0;
                 },
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Down), ..} => {
-                    world.velocities.get_mut(&player).unwrap().1 = 0.0;
+                    world.velocities.get_mut(&player).unwrap().y = 0.0;
                 },
                 _ => {}
             }
@@ -245,7 +162,7 @@ fn main() {
             accumulator -= update_time;
         }
 
-        render(&gl, &world, &mut sprite_batch);
+        render::update(&gl, &world, &mut sprite_batch);
         window.gl_swap_window();
     }
 }
