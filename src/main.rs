@@ -5,10 +5,13 @@ extern crate rand;
 extern crate png;
 extern crate cgmath;
 extern crate time;
+extern crate hashbrown;
+use hashbrown::HashMap;
 
 
 use rand::{thread_rng, Rng};
 use time::precise_time_s;
+// use std::collections::HashMap;
 
 pub mod texture_region;
 pub mod quad;
@@ -21,62 +24,109 @@ use texture_region::TextureRegion;
 use quad::Quad;
 use vertex::Vertex;
 
-struct Entity <'a> {
-    x: f32,
-    y: f32,
-    vx: f32,
-    vy: f32,
-    texture_region: &'a TextureRegion,
-    width: f32,
-    height: f32
+trait Component {
 }
 
-impl<'a> Entity <'a> {
-    pub fn to_quad(&self) -> Quad {
-        Quad::new(
-            Vertex {
-                pos: (self.width + self.x, self.y + self.height, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (self.texture_region.u2, self.texture_region.v2)
-            },
-            Vertex {
-                pos: (self.x + self.width, self.y, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (self.texture_region.u2, self.texture_region.v1)
-            },
-            Vertex {
-                pos: (self.x, self.y, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (self.texture_region.u1, self.texture_region.v1)
-            },
-            Vertex {
-                pos: (self.x, self.y + self.height, 0.0),
-                color: (1.0, 1.0, 1.0, 1.0),
-                uv: (self.texture_region.u1, self.texture_region.v2)
-            },
-        )
+pub struct Position(f32, f32);
+pub struct Velocity(f32, f32);
+pub struct Sized(f32, f32);
+pub struct TextureRegioned<'a> (&'a TextureRegion);
+
+impl Component for Position {}
+impl Component for Velocity {}
+impl Component for Sized {}
+#[derive(Hash, Eq, PartialEq, Clone, Copy)]
+struct Entity (u32);
+
+struct World<'a> {
+    last_id: u32,
+    entities: Vec<Entity>,
+    positions: HashMap<Entity, Position>,
+    velocities: HashMap<Entity, Velocity>,
+    sizes: HashMap<Entity, Sized>,
+    texture_regioned: HashMap<Entity, TextureRegioned<'a>>,
+}
+
+
+
+impl <'a> World <'a> {
+    /*
+    fn new() -> World {
+        World {
+            last_id: 0,
+            entities: Vec::new(),
+            positions: HashMap::new(),
+            velocities: HashMap::new(),
+            sizes: HashMap::new(),
+            texture_regions: HashMap::new(),
+
+            
+        }
+    }
+    */
+    fn create_entity(&mut self, p: Position, v: Velocity, s: Sized, t: TextureRegioned<'a>)  -> Entity {
+        self.last_id += 1;
+        let id = self.last_id;;
+        let e = Entity(id);
+        self.positions.insert(e, p);
+        self.velocities.insert(e, v);
+        self.sizes.insert(e, s);
+        self.texture_regioned.insert(e, t);
+        self.entities.push(e);
+        e
     }
 }
 
-struct World<'a> {
-    player: Entity<'a>,
-    enemies: Vec<Entity<'a>>
+pub fn to_quad(p: &Position, s: &Sized, t: &TextureRegion) -> Quad {
+    Quad::new(
+        Vertex {
+            pos: (s.0 + p.0, p.1 + s.1, 0.0),
+            color: (1.0, 1.0, 1.0, 1.0),
+            uv: (t.u2, t.v2)
+        },
+        Vertex {
+            pos: (p.0 + s.0, p.1, 0.0),
+            color: (1.0, 1.0, 1.0, 1.0),
+            uv: (t.u2, t.v1)
+        },
+        Vertex {
+            pos: (p.0, p.1, 0.0),
+            color: (1.0, 1.0, 1.0, 1.0),
+            uv: (t.u1, t.v1)
+        },
+        Vertex {
+            pos: (p.0, p.1 + s.1, 0.0),
+            color: (1.0, 1.0, 1.0, 1.0),
+            uv: (t.u1, t.v2)
+        },
+    )
 }
 
 fn update(world: &mut World) {
-    world.enemies.iter_mut().for_each(|d| {
-        d.y = d.y + d.vy;
-        d.x = d.x + d.vx;
-    });
-    world.player.x += world.player.vx;
-    world.player.y += world.player.vy;
+    let positions = &mut world.positions;
+    let velocities = &world.velocities;
+    world.entities
+        .iter()
+        .for_each(|e| {
+            let (position, velocity) = (positions.get_mut(e).unwrap(), velocities.get(e).unwrap());
+            position.0 += velocity.0;
+            position.1 += velocity.1;
+            
+        });
 }
+
 
 fn render(gl: &gl::Gl, world: &World, sprite_batch: &mut SpriteBatch) {
     unsafe {
         gl.Clear(gl::COLOR_BUFFER_BIT);
-        world.enemies.iter().for_each(|d| sprite_batch.draw(&d.texture_region, &d.to_quad()));
-        sprite_batch.draw(&world.player.texture_region, &world.player.to_quad());
+        world.entities
+            .iter()
+            .for_each(|e| {
+                let (position, size, texture_regioned) = (world.positions.get(e).unwrap(), world.sizes.get(e).unwrap(), world.texture_regioned.get(e).unwrap());
+                sprite_batch.draw(&texture_regioned.0, &to_quad(&position, &size, &texture_regioned.0));
+
+                
+            });
     }
 
     sprite_batch.flush();
@@ -129,28 +179,23 @@ fn main() {
     let mut enemy = texture_region::TextureRegion::new(&gl, "enemy.png");
     let mut sprite_batch = SpriteBatch::new(&gl, &shader_program, ortho_matrix);
     let mut world = World {
-        player: Entity {
-            width: 119.0,
-            height: 134.0,
-            texture_region: &sprite,
-            x: 500.3,
-            y: 300.9,
-            vx: 0.0,
-            vy: 0.0,
-        },
-        enemies: (0..100)
-            .map(|_| Entity {
-                width: 119.0,
-                height: 134.0,
-                texture_region: &enemy,
-                x: rng.gen_range(0.0, 1280.0),
-                y: rng.gen_range(0.0, 760.0),
-                vx: rng.gen_range(-4.0, 4.0),
-                vy: rng.gen_range(-4.0, 4.0),
-            })
-            .collect() 
-    };
+            last_id: 0,
+            entities: Vec::with_capacity(10000),
+            positions: HashMap::with_capacity(10000),
+            velocities: HashMap::with_capacity(10000),
+            sizes: HashMap::with_capacity(10000),
+        texture_regioned: HashMap::with_capacity(10000),
 
+            
+        }
+;
+    let player = world.create_entity(Position(500.0, 300.0), Velocity(0.0, 0.0), Sized(119.0, 134.0), TextureRegioned(&sprite));
+    {
+    (0..1000)
+        .for_each(|_| { world.create_entity(Position(rng.gen_range(0.0, 1280.0), rng.gen_range(0.0, 1280.0)), Velocity(rng.gen_range(-0.1, 0.1), rng.gen_range(-0.1, 0.1)), Sized(119.0, 134.0), TextureRegioned(&enemy));
+
+        });
+}
     let update_time: f64 = 0.01;
     let mut current_time: f64 = precise_time_s();
     let mut accumulator: f64 = 0.0;
@@ -172,18 +217,18 @@ fn main() {
             match event {
                 sdl2::event::Event::Quit { ..  } | sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Q), ..} => break 'main,
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Left), ..} => {
-                    world.player.vx = -2.0;
+                    world.velocities.get_mut(&player).unwrap().0 = -2.0;
                 },
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Right), ..} => {
-                    world.player.vx = 2.0;
+                    world.velocities.get_mut(&player).unwrap().0 = 2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Up), ..} => {
-                    world.player.vy = -2.0;
+                    world.velocities.get_mut(&player).unwrap().1 = -2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Down), ..} => {
-                    world.player.vy = 2.0;
+                    world.velocities.get_mut(&player).unwrap().1 = 2.0;
                 },
 
                 sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::H), ..} => {
@@ -195,16 +240,16 @@ fn main() {
                 },
 
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Left), ..} => {
-                    world.player.vx = 0.0;
+                    world.velocities.get_mut(&player).unwrap().0 = 0.0;
                 },
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Up), ..} => {
-                    world.player.vy = 0.0;
+                    world.velocities.get_mut(&player).unwrap().1 = 0.0;
                 },
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Right), ..} => {
-                    world.player.vx = 0.0;
+                    world.velocities.get_mut(&player).unwrap().0 = 0.0;
                 },
                 sdl2::event::Event::KeyUp { keycode: Some(sdl2::keyboard::Keycode::Down), ..} => {
-                    world.player.vy = 0.0;
+                    world.velocities.get_mut(&player).unwrap().1 = 0.0;
                 },
                 _ => {}
             }

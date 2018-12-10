@@ -26,7 +26,7 @@ impl <'a> SpriteBatch<'a> {
             .cloned()
             .collect();
 
-        let mut result = SpriteBatch { gl: gl.clone(), vao: 0, vbo: 0, ebo: 0, vertex_buffer: Vec::with_capacity(400000), index_buffer: Vec::with_capacity(400000), count: 0, current_texture: 0, shader_program, projection};
+        let mut result = SpriteBatch { gl: gl.clone(), vao: 0, vbo: 0, ebo: 0, vertex_buffer: Vec::with_capacity(1000000), index_buffer: Vec::with_capacity(1000000), count: 0, current_texture: 0, shader_program, projection};
         unsafe {
             gl.GenBuffers(1, &mut result.vbo);
             gl.BindBuffer(gl::ARRAY_BUFFER, result.vbo);
